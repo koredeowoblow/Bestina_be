@@ -1,8 +1,8 @@
 import app from './app.js';
-import connectDB from './config/db.config.js';
+import { connectMongoDB } from './config/db.config.js';
 import config from './config/index.js';
 // Connect to Database
-connectDB();
+connectMongoDB();
 
 // Handle uncaught exceptions
 process.on('uncaughtException', err => {

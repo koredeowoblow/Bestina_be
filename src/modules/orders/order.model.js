@@ -1,5 +1,6 @@
-import mongoose from 'mongoose';
-import mongoosePaginate from 'mongoose-paginate-v2';
+const mongoose = require('mongoose');
+const mongoosePaginate = require('mongoose-paginate-v2');
+
 const orderItemSchema = new mongoose.Schema({
   product: { type: mongoose.Schema.Types.ObjectId, ref: 'Product', required: true },
   qty: { type: Number, required: true, min: 1 },
@@ -22,10 +23,10 @@ const orderSchema = new mongoose.Schema({
   paymentMethod: { type: String, enum: ['paystack', 'stripe'], required: true },
   paymentStatus: { type: String, enum: ['pending', 'paid', 'failed'], default: 'pending' },
   paymentRef: String,
-  orderStatus: { 
-    type: String, 
-    enum: ['pending', 'processing', 'shipped', 'delivered', 'cancelled'], 
-    default: 'pending' 
+  orderStatus: {
+    type: String,
+    enum: ['pending', 'processing', 'shipped', 'delivered', 'cancelled'],
+    default: 'pending'
   },
   subtotal: { type: Number, required: true },
   discount: { type: Number, default: 0 },
@@ -40,11 +41,11 @@ const orderSchema = new mongoose.Schema({
 orderSchema.plugin(mongoosePaginate);
 
 // Log timeline changes
-orderSchema.pre('save', function(next) {
+orderSchema.pre('save', function (next) {
   if (this.isNew || this.isModified('orderStatus')) {
     this.timeline.push({ status: this.orderStatus, timestamp: new Date() });
   }
   next();
 });
 
-export default mongoose.model('Order', orderSchema);
+module.exports = mongoose.model('Order', orderSchema);
