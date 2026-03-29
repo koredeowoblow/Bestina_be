@@ -1,4 +1,4 @@
-import Joi from 'joi';
+import Joi from "joi";
 const productValidation = {
   create: Joi.object({
     name: Joi.string().required(),
@@ -8,15 +8,12 @@ const productValidation = {
     category: Joi.string().hex().length(24).required(),
     price: Joi.number().integer().min(0).required(),
     discountPrice: Joi.number().integer().min(0),
-    images: Joi.array().items(
-      Joi.object({
-        url: Joi.string().required(),
-        publicId: Joi.string().required()
-      })
-    ).min(1).required(),
+    images: Joi.forbidden(),
+    imageBuffer: Joi.any(),
+    imageBuffers: Joi.array().items(Joi.any()),
     stock: Joi.number().min(0).required(),
     prescriptionRequired: Joi.boolean(),
-    isArchived: Joi.boolean()
+    isArchived: Joi.boolean(),
   }),
   update: Joi.object({
     name: Joi.string(),
@@ -26,15 +23,16 @@ const productValidation = {
     category: Joi.string().hex().length(24),
     price: Joi.number().integer().min(0),
     discountPrice: Joi.number().integer().min(0),
-    images: Joi.array().items(
-      Joi.object({
-        url: Joi.string().required(),
-        publicId: Joi.string().required()
-      })
+    images: Joi.forbidden(),
+    imageBuffer: Joi.any(),
+    imageBuffers: Joi.array().items(Joi.any()),
+    existingImages: Joi.alternatives().try(
+      Joi.array().items(Joi.string().trim()),
+      Joi.string().trim(),
     ),
     stock: Joi.number().min(0),
     prescriptionRequired: Joi.boolean(),
-    isArchived: Joi.boolean()
+    isArchived: Joi.boolean(),
   }),
   query: Joi.object({
     page: Joi.number().min(1).default(1),
@@ -45,8 +43,8 @@ const productValidation = {
     maxPrice: Joi.number().integer().min(0),
     search: Joi.string(),
     sort: Joi.string(),
-    in_stock: Joi.boolean()
-  })
+    in_stock: Joi.boolean(),
+  }),
 };
 
 export default productValidation;

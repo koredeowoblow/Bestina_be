@@ -1,27 +1,17 @@
-import express from 'express';
-import multer from 'multer';
-import uploadController from './upload.controller.js';
-import { protect, restrictTo } from '../../middlewares/auth.middleware.js';
-import AppError from '../../utils/AppError.js';
+import express from "express";
+import uploadController from "./upload.controller.js";
+import upload from "../../middlewares/upload.middleware.js";
+import { protect, restrictTo } from "../../middlewares/auth.middleware.js";
+
 const router = express.Router();
 
-// Configure Multer for memory storage structure limiting sizes and types
-const storage = multer.memoryStorage();
-const upload = multer({
-  storage,
-  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB limit
-  fileFilter: (req, file, cb) => {
-    if (file.mimetype.startsWith('image/')) {
-      cb(null, true);
-    } else {
-      cb(new AppError('Not an image! Please upload only images.', 400), false);
-    }
-  }
-});
+router.use(protect);
 
-// Using protect middleware to enforce admin/system ownership
-router.use(protect, restrictTo('admin', 'super_admin'));
-
-router.post('/image', upload.single('image'), uploadController.uploadImage);
+router.post("/", upload.single("image"), uploadController.uploadImage);
+router.delete(
+  "/:publicId",
+  restrictTo("admin", "super_admin"),
+  uploadController.deleteImage,
+);
 
 export default router;

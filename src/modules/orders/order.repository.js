@@ -1,13 +1,17 @@
-import Order from './order.model.js';
+import Order from "./order.model.js";
 class OrderRepository {
   async paginateOrders(filter, options) {
-    return await Order.paginate(filter, options);
+    const defaultOptions = {
+      lean: true,
+      ...options,
+    };
+    return await Order.paginate(filter, defaultOptions);
   }
 
   async findById(id) {
     return await Order.findById(id)
-      .populate('user', 'name email')
-      .populate('items.product', 'name price images')
+      .populate("user", "name email")
+      .populate("items.product", "name price images")
       .lean();
   }
 
@@ -37,9 +41,9 @@ class OrderRepository {
       id,
       {
         paymentStatus: status,
-        $addToSet: { payments: paymentId }
+        $addToSet: { payments: paymentId },
       },
-      { new: true, session }
+      { new: true, session },
     );
   }
 }
