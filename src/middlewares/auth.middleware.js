@@ -3,7 +3,7 @@ import { promisify } from 'util';
 import config from '../config/index.js';
 import AppError from '../utils/AppError.js';
 import asyncWrapper from '../utils/asyncWrapper.js';
-import redisClient from '../config/redis.config.js';
+import { getRedisClient, isRedisAvailable } from '../config/redis.config.js';
 import User from '../modules/auth/auth.model.js';
 // Note: Requires User model to be implemented.
 // We will import it here, assuming auth module provides it.
@@ -21,7 +21,12 @@ export const protect = asyncWrapper(async (req, res, next) => {
   }
 
   // 2. Check if token is in Redis blacklist (e.g. user logged out)
-  const isBlacklisted = await redisClient.get(`bl_${token}`);
+  let isBlacklisted = false;
+  if (isRedisAvailable()) {
+    const redisClient = await getRedisClient();
+    isBlacklisted = await redisClient.get(`bl_${token}`);
+  }
+  
   if (isBlacklisted) {
     return next(new AppError('Token is no longer valid. Please log in again.', 401));
   }

@@ -1,5 +1,5 @@
 import productRepo from './product.repository.js';
-import redisClient from '../../config/redis.config.js';
+import { getRedisClient, isRedisAvailable } from '../../config/redis.config.js';
 import AppError from '../../utils/AppError.js';
 const CACHE_PREFIX = 'products_';
 const CACHE_TTL = 300; // 5 minutes
@@ -11,9 +11,12 @@ class ProductService {
     const cacheKey = `${CACHE_PREFIX}${isAdmin ? 'admin_' : ''}${queryHash}`;
 
     // Try cache first
-    const cached = await redisClient.get(cacheKey);
-    if (cached) {
-      return JSON.parse(cached);
+    if (isRedisAvailable()) {
+      const redisClient = await getRedisClient();
+      const cached = await redisClient.get(cacheKey);
+      if (cached) {
+        return JSON.parse(cached);
+      }
     }
 
     // Build filter
@@ -50,7 +53,10 @@ class ProductService {
     const result = await productRepo.paginateProducts(filter, options);
     
     // Save to cache
-    await redisClient.set(cacheKey, JSON.stringify(result), 'EX', CACHE_TTL);
+    if (isRedisAvailable()) {
+      const redisClient = await getRedisClient();
+      await redisClient.set(cacheKey, JSON.stringify(result), { EX: CACHE_TTL });
+    }
 
     return result;
   }
@@ -67,15 +73,17 @@ class ProductService {
 
   async invalidateCache() {
     // Invalidate all keys starting with products_
-    let cursor = '0';
+    if (!isRedisAvailable()) return;
+    const redisClient = await getRedisClient();
+    let cursor = 0;
     do {
-      const res = await redisClient.scan(cursor, 'MATCH', `${CACHE_PREFIX}*`, 'COUNT', '100');
-      cursor = res[0];
-      const keys = res[1];
-      if (keys.length > 0) {
+      const res = await redisClient.scan(cursor, { MATCH: `${CACHE_PREFIX}*`, COUNT: 100 });
+      cursor = res.cursor;
+      const keys = res.keys;
+      if (keys && keys.length > 0) {
         await redisClient.del(keys);
       }
-    } while (cursor !== '0');
+    } while (cursor !== 0);
   }
 
   async createProduct(data) {

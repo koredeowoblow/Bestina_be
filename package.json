@@ -19,7 +19,6 @@
     "express-mongo-sanitize": "^2.2.0",
     "express-rate-limit": "^7.2.0",
     "helmet": "^7.1.0",
-    "ioredis": "^5.3.2",
     "joi": "^17.13.0",
     "jsonwebtoken": "^9.0.2",
     "mongoose": "^8.3.0",
@@ -28,6 +27,7 @@
     "multer": "^1.4.5-lts.1",
     "nodemailer": "^6.9.13",
     "paystack": "^2.0.1",
+    "redis": "^5.11.0",
     "stripe": "^14.24.0",
     "winston": "^3.13.0"
   },

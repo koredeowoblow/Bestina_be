@@ -3,7 +3,7 @@ import crypto from 'crypto';
 import config from '../../config/index.js';
 import AppError from '../../utils/AppError.js';
 import authRepo from './auth.repository.js';
-import redisClient from '../../config/redis.config.js';
+import { getRedisClient, isRedisAvailable } from '../../config/redis.config.js';
 // Fallback keys for development if not provided in env
 const { privateKey, publicKey } = crypto.generateKeyPairSync('rsa', {
   modulusLength: 2048,
@@ -72,9 +72,10 @@ class AuthService {
     const now = Math.floor(Date.now() / 1000);
     const ttl = tokenExp - now;
 
-    if (ttl > 0) {
+    if (ttl > 0 && isRedisAvailable()) {
       // Add token to Redis blacklist with TTL
-      await redisClient.set(`bl_${token}`, token, 'EX', ttl);
+      const redisClient = await getRedisClient();
+      await redisClient.set(`bl_${token}`, token, { EX: ttl });
     }
 
     res.status(200).json({
@@ -94,7 +95,12 @@ class AuthService {
       throw new AppError('Invalid or expired refresh token. Please login again.', 401);
     }
 
-    const isBlacklisted = await redisClient.get(`bl_${refreshToken}`);
+    let isBlacklisted = false;
+    if (isRedisAvailable()) {
+      const redisClient = await getRedisClient();
+      isBlacklisted = await redisClient.get(`bl_${refreshToken}`);
+    }
+    
     if (isBlacklisted) {
       throw new AppError('Refresh token revoked. Please login again.', 401);
     }

@@ -1,21 +1,68 @@
-import Redis from 'ioredis';
-import config from './index.js';
-const redisClient = config.redis.url ? new Redis(config.redis.url) : new Redis({
-  host: config.redis.host,
-  port: config.redis.port,
-  password: config.redis.password,
-  retryStrategy(times) {
-    const delay = Math.min(times * 50, 2000);
-    return delay;
-  },
-});
+import { createClient } from 'redis';
+import 'dotenv/config.js'; // Load environment variables first
 
-redisClient.on('connect', () => {
-  console.log('Redis client connected');
-});
+let redisClient = null;
+let redisAvailable = false;
 
-redisClient.on('error', (err) => {
-  console.error('Redis connection error:', err);
-});
+const initializeRedis = async () => {
+    if (!redisClient) {
+        try {
+            // Parse REDIS_HOST in case it includes port
+            const hostParts = (process.env.REDIS_HOST || 'localhost').split(':');
+            const host = hostParts[0];
+            const port = process.env.REDIS_PORT || hostParts[1] || 6379;
+            
+            const redisUrl = `redis://:${process.env.REDIS_PASSWORD}@${host}:${port}/${process.env.REDIS_DB || 0}`;
+            
+            console.log('Connecting to Redis:', `redis://:***@${host}:${port}/${process.env.REDIS_DB || 0}`);
+            
+            redisClient = createClient({
+                url: redisUrl,
+                socket: {
+                    connectTimeout: 10000,
+                    lazyConnect: true
+                }
+            });
 
-export default redisClient;
+            redisClient.on('error', (err) => {
+                console.error('Redis connection error:', err.message);
+                redisAvailable = false;
+            });
+
+            redisClient.on('connect', () => {
+                console.log('Connected to Redis successfully');
+                redisAvailable = true;
+            });
+
+            redisClient.on('ready', () => {
+                console.log('Redis client ready');
+                redisAvailable = true;
+            });
+
+            redisClient.on('end', () => {
+                console.log('Redis connection closed');
+                redisAvailable = false;
+            });
+
+            await redisClient.connect();
+            redisAvailable = true;
+        } catch (error) {
+            console.error('Failed to connect to Redis:', error.message);
+            console.warn('⚠️ Redis unavailable - OTP functionality will use in-memory fallback');
+            redisAvailable = false;
+            redisClient = null;
+        }
+    }
+    return redisClient;
+};
+
+const getRedisClient = async () => {
+    if (!redisClient || !redisClient.isOpen) {
+        await initializeRedis();
+    }
+    return redisClient;
+};
+
+const isRedisAvailable = () => redisAvailable;
+
+export { getRedisClient, initializeRedis, isRedisAvailable };
