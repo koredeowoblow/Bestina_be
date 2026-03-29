@@ -35,7 +35,10 @@ const userSchema = new mongoose.Schema({
     type: Boolean,
     default: false
   },
-  addresses: [addressSchema],
+  addresses: {
+    type: [addressSchema],
+    validate: [(val) => val.length <= 10, '{PATH} exceeds the limit of 10']
+  },
   passwordResetToken: String,
   passwordResetExpires: Date
 }, { timestamps: true });

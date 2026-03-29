@@ -3,7 +3,12 @@ import orderController from './order.controller.js';
 import validate from '../../middlewares/validate.middleware.js';
 import orderValidation from './order.validation.js';
 import { protect, restrictTo } from '../../middlewares/auth.middleware.js';
+import returnRoutes from '../returns/returns.routes.js';
+
 const router = express.Router();
+
+// Mount returns sub-router
+router.use('/:orderId/returns', returnRoutes);
 
 // Protected User Routes
 router.use(protect);

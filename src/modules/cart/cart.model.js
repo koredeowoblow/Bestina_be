@@ -15,8 +15,8 @@ const cartSchema = new mongoose.Schema({
 
 // Middleware to calculate totals on save
 cartSchema.pre('save', function(next) {
-  this.subtotal = this.items.reduce((acc, item) => acc + (item.price * item.qty), 0);
-  this.total = this.subtotal - this.discountTotal;
+  this.subtotal = Math.round(this.items.reduce((acc, item) => acc + (item.price * item.qty), 0));
+  this.total = Math.round(this.subtotal - this.discountTotal);
   if (this.total < 0) this.total = 0;
   next();
 });

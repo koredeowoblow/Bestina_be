@@ -3,12 +3,12 @@ import asyncWrapper from '../../utils/asyncWrapper.js';
 
 class AuthController {
   register = asyncWrapper(async (req, res, next) => {
-    await AuthService.register(req.body, res);
+    await AuthService.register(req.body, req, res);
   });
 
   login = asyncWrapper(async (req, res, next) => {
     const { email, password } = req.body;
-    await AuthService.login(email, password, res);
+    await AuthService.login(email, password, req, res);
   });
 
   logout = asyncWrapper(async (req, res, next) => {
@@ -25,8 +25,9 @@ class AuthController {
   });
 
   refresh = asyncWrapper(async (req, res, next) => {
-    const { refreshToken } = req.body;
-    await AuthService.refresh(refreshToken, res);
+    const refreshToken = req.cookies?.jwt_refresh || req.body?.refreshToken;
+    if (!refreshToken) return next(new AppError('No refresh token provided', 401));
+    await AuthService.refresh(refreshToken, req, res);
   });
 
   getMe = asyncWrapper(async (req, res, next) => {

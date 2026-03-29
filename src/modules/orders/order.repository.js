@@ -31,6 +31,17 @@ class OrderRepository {
     if (ref) updatePayload.paymentRef = ref;
     return await Order.findByIdAndUpdate(id, updatePayload, { new: true });
   }
+
+  async recordPaymentStatus(id, paymentId, status, session = null) {
+    return await Order.findByIdAndUpdate(
+      id,
+      {
+        paymentStatus: status,
+        $addToSet: { payments: paymentId }
+      },
+      { new: true, session }
+    );
+  }
 }
 
 export default new OrderRepository();

@@ -1,10 +1,10 @@
-const mongoose = require('mongoose');
-const mongoosePaginate = require('mongoose-paginate-v2');
+import mongoose from 'mongoose';
+import mongoosePaginate from 'mongoose-paginate-v2';
 
 const orderItemSchema = new mongoose.Schema({
   product: { type: mongoose.Schema.Types.ObjectId, ref: 'Product', required: true },
-  qty: { type: Number, required: true, min: 1 },
-  price: { type: Number, required: true, min: 0 }
+  qty: { type: Number, required: true, min: 1, set: v => Math.round(v) },
+  price: { type: Number, required: true, min: 0, set: v => Math.round(v) }
 }, { _id: false });
 
 const addressSchema = new mongoose.Schema({
@@ -21,21 +21,24 @@ const orderSchema = new mongoose.Schema({
   items: [orderItemSchema],
   shippingAddress: addressSchema,
   paymentMethod: { type: String, enum: ['paystack', 'stripe'], required: true },
-  paymentStatus: { type: String, enum: ['pending', 'paid', 'failed'], default: 'pending' },
-  paymentRef: String,
+  paymentStatus: { type: String, enum: ['pending', 'paid', 'failed', 'refunded'], default: 'pending' },
+  payments: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Payment' }],
   orderStatus: {
     type: String,
     enum: ['pending', 'processing', 'shipped', 'delivered', 'cancelled'],
     default: 'pending'
   },
-  subtotal: { type: Number, required: true },
-  discount: { type: Number, default: 0 },
-  deliveryFee: { type: Number, default: 0 },
-  total: { type: Number, required: true },
-  timeline: [{
-    status: { type: String },
-    timestamp: { type: Date, default: Date.now }
-  }]
+  subtotal: { type: Number, required: true, set: v => Math.round(v) },
+  discount: { type: Number, default: 0, set: v => Math.round(v) },
+  deliveryFee: { type: Number, default: 0, set: v => Math.round(v) },
+  total: { type: Number, required: true, set: v => Math.round(v) },
+  timeline: {
+    type: [{
+      status: { type: String },
+      timestamp: { type: Date, default: Date.now }
+    }],
+    validate: [(val) => val.length <= 20, '{PATH} exceeds the limit of 20']
+  }
 }, { timestamps: true });
 
 orderSchema.plugin(mongoosePaginate);
@@ -48,4 +51,4 @@ orderSchema.pre('save', function (next) {
   next();
 });
 
-module.exports = mongoose.model('Order', orderSchema);
+export default mongoose.model('Order', orderSchema);

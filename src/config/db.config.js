@@ -1,6 +1,7 @@
 import mongoose from "mongoose";
-import config from "./index.js";
+import "../env.js";
 import dns from "node:dns";
+import { logger } from "../utils/logger.js";
 
 dns.setServers(["8.8.8.8", "8.8.4.4"]);
 const mongoUri = process.env.MONGODB_URI || process.env.MONGO_URI || "mongodb://localhost:27017/mowdmin";
@@ -8,7 +9,7 @@ const mongoUri = process.env.MONGODB_URI || process.env.MONGO_URI || "mongodb://
 export const connectMongoDB = async () => {
   let retries = 5;
   while (retries > 0) {
-    console.log("Connecting to MongoDB...");
+    logger.info("Connecting to MongoDB...");
     try {
       await mongoose.connect(mongoUri, {
         dbName: process.env.MONGO_DB_NAME || "Bestina",
@@ -17,16 +18,17 @@ export const connectMongoDB = async () => {
         minPoolSize: 2,
         socketTimeoutMS: 45000,
       });
-      console.log("✅ MongoDB connection established successfully.");
+      logger.info("✅ MongoDB connection established successfully.");
       return;
     } catch (error) {
-      console.error(`❌ MongoDB connection error:`, error.message);
+      console.error('MongoDB connection failed:', error);
+      logger.error(`❌ MongoDB connection error:`, { error: error.message });
       retries -= 1;
       if (retries === 0) {
         throw error;
       }
-      console.log(
-        `Retrying MongoDB connection... (${5 - retries}/5) in 5 seconds...`,
+      logger.warn(
+        `Retrying MongoDB connection... (${5 - retries}/5) in 5 seconds...`
       );
       await new Promise((res) => setTimeout(res, 5000));
     }

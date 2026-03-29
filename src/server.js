@@ -1,25 +1,37 @@
 import app from './app.js';
 import { connectMongoDB } from './config/db.config.js';
+import { initializeRedis } from './config/redis.config.js';
 import config from './config/index.js';
-// Connect to Database
-connectMongoDB();
+import { logger } from './utils/logger.js';
 
-// Handle uncaught exceptions
 process.on('uncaughtException', err => {
-  console.log('UNCAUGHT EXCEPTION! 💥 Shutting down...');
-  console.log(err.name, err.message);
+  console.error('UNCAUGHT EXCEPTION! 💥', err);
+  logger.error('UNCAUGHT EXCEPTION! 💥 Shutting down...', { error: err.stack || err });
   process.exit(1);
 });
 
-const server = app.listen(config.port, () => {
-  console.log(`App running on port ${config.port} in ${config.env} mode`);
-});
+const startServer = async () => {
+  try {
+    // Parallel initialization for faster boot
+    await Promise.all([
+      connectMongoDB(),
+      initializeRedis()
+    ]);
+    
+    const server = app.listen(config.port, () => {
+      logger.info(`App running on port ${config.port} in ${config.env} mode`);
+    });
 
-// Handle unhandled promise rejections
-process.on('unhandledRejection', err => {
-  console.log('UNHANDLED REJECTION! 💥 Shutting down...');
-  console.log(err.name, err.message);
-  server.close(() => {
+    process.on('unhandledRejection', err => {
+      logger.error('UNHANDLED REJECTION! 💥 Shutting down...', { error: err.stack || err });
+      server.close(() => {
+        process.exit(1);
+      });
+    });
+  } catch (error) {
+    logger.error('❌ Failed to start server:', { error: error.message });
     process.exit(1);
-  });
-});
+  }
+};
+
+startServer();

@@ -1,6 +1,8 @@
 import cartRepo from './cart.repository.js';
 import productRepo from '../products/product.repository.js';
 import AppError from '../../utils/AppError.js';
+import eventBus from '../../utils/eventBus.js';
+
 class CartService {
   async getCart(userId) {
     let cart = await cartRepo.getCartByUserId(userId);
@@ -76,8 +78,21 @@ class CartService {
   }
 
   async clearCart(userId) {
-    return await cartRepo.clearCart(userId);
+    const cart = await cartRepo.clearCart(userId);
+    return cart;
   }
 }
 
-export default new CartService();
+const cartService = new CartService();
+
+eventBus.on('order.paid', async (order) => {
+  try {
+    // order.user can be populated object or ObjectId
+    const userId = order.user._id || order.user;
+    await cartService.clearCart(userId);
+  } catch (err) {
+    console.error('Failed to clear cart via EventBus:', err);
+  }
+});
+
+export default cartService;

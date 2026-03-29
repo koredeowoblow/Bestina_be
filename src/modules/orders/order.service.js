@@ -1,6 +1,5 @@
 import orderRepo from './order.repository.js';
 import cartService from '../cart/cart.service.js';
-import stripeService from '../payments/stripe.service.js';
 import AppError from '../../utils/AppError.js';
 class OrderService {
   async createOrder(userId, email, payload) {
@@ -31,22 +30,10 @@ class OrderService {
 
     const order = await orderRepo.create(orderData);
 
-    // After order created, initiate payment
-    let paymentData = null;
-    if (paymentMethod === 'stripe') {
-      const intent = await stripeService.createPaymentIntent(order.total, 'usd', order._id.toString(), email);
-      // We could store intentId in paymentRef if needed
-      await orderRepo.updatePayment(order._id, 'pending', intent.intentId);
-      paymentData = { clientSecret: intent.clientSecret, intentId: intent.intentId };
-    } else if (paymentMethod === 'paystack') {
-      // Paystack initialize logic here...
-      paymentData = { authorization_url: 'https://checkout.paystack.com/...', reference: 'mock_ref' };
-    }
+    // Cart is NOT cleared until payment webhook succeeds, to prevent orphan failed orders clearing carts.
+    // The payment initialization is now securely delegated to POST /api/payments/initialize
 
-    // Usually cart is NOT cleared until payment webhook succeeds, to prevent orphan failed orders clearing carts. 
-    // However, specs sometimes vary. I'll leave cart until webhook verifies.
-
-    return { order, paymentData };
+    return { order };
   }
 
   async getMyOrders(userId, query) {

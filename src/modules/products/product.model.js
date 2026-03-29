@@ -7,8 +7,8 @@ const productSchema = new mongoose.Schema({
   dosageInfo: String,
   brand: { type: String, required: true },
   category: { type: mongoose.Schema.Types.ObjectId, ref: 'Category', required: true },
-  price: { type: Number, required: true, min: 0 },
-  discountPrice: { type: Number, min: 0 },
+  price: { type: Number, required: true, min: 0, set: v => Math.round(v) },
+  discountPrice: { type: Number, min: 0, set: v => Math.round(v) },
   images: [{
     url: { type: String, required: true },
     publicId: { type: String, required: true }
@@ -25,6 +25,8 @@ const productSchema = new mongoose.Schema({
 
 // Compound and text indexes for faster searches
 productSchema.index({ category: 1, price: 1 });
+productSchema.index({ category: 1, brand: 1, price: -1 });
+productSchema.index({ isArchived: 1, stock: 1 });
 productSchema.index({ name: 'text', brand: 'text' });
 
 // Add pagination plugin

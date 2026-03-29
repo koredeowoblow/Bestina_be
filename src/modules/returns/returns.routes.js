@@ -1,17 +1,18 @@
 import express from 'express';
 import returnController from './return.controller.js';
 import { protect, restrictTo } from '../../middlewares/auth.middleware.js';
-const router = express.Router();
+import { createReturnSchema, evaluateReturnSchema } from './return.validation.js';
+import validate from '../../middlewares/validate.middleware.js';
 
-// Required auth for returns
-router.use(protect);
+// enable mergeParams to absorb orderId from parent
+const router = express.Router({ mergeParams: true });
 
-router.post('/', returnController.createReturn);
-router.get('/me', returnController.getMyReturns);
+// User endpoints
+router.post('/', protect, validate(createReturnSchema), returnController.createReturn);
+router.get('/me', protect, returnController.getMyReturns);
 
 // Admin pathways internally nested in returns route scope
-router.use(restrictTo('admin', 'super_admin'));
+router.use(protect, restrictTo('admin', 'super_admin'));
 router.get('/', returnController.getAdminReturns);
-router.post('/:id/process', returnController.processReturn);
 
 export default router;

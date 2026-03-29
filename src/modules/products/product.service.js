@@ -1,14 +1,21 @@
 import productRepo from './product.repository.js';
 import { getRedisClient, isRedisAvailable } from '../../config/redis.config.js';
 import AppError from '../../utils/AppError.js';
+import eventBus from '../../utils/eventBus.js';
 const CACHE_PREFIX = 'products_';
 const CACHE_TTL = 300; // 5 minutes
 
 class ProductService {
   async getProducts(query, isAdmin = false) {
-    // Generate cache key based on query params
+    let version = 'v1';
+    if (isRedisAvailable()) {
+      const redisClient = await getRedisClient();
+      version = await redisClient.get('products_version') || 'v1';
+    }
+
+    // Generate cache key based on query params and global version
     const queryHash = Buffer.from(JSON.stringify(query)).toString('base64');
-    const cacheKey = `${CACHE_PREFIX}${isAdmin ? 'admin_' : ''}${queryHash}`;
+    const cacheKey = `${CACHE_PREFIX}${version}_${isAdmin ? 'admin_' : ''}${queryHash}`;
 
     // Try cache first
     if (isRedisAvailable()) {
@@ -72,18 +79,10 @@ class ProductService {
   }
 
   async invalidateCache() {
-    // Invalidate all keys starting with products_
+    // O(1) invalidation: atomic increment of global version key seamlessly orphans all standing caches
     if (!isRedisAvailable()) return;
     const redisClient = await getRedisClient();
-    let cursor = 0;
-    do {
-      const res = await redisClient.scan(cursor, { MATCH: `${CACHE_PREFIX}*`, COUNT: 100 });
-      cursor = res.cursor;
-      const keys = res.keys;
-      if (keys && keys.length > 0) {
-        await redisClient.del(keys);
-      }
-    } while (cursor !== 0);
+    await redisClient.incr('products_version');
   }
 
   async createProduct(data) {
@@ -105,6 +104,25 @@ class ProductService {
     await this.invalidateCache();
     return product;
   }
+
+  async reduceStockForOrder(orderItems) {
+    if (!orderItems || orderItems.length === 0) return;
+    const promises = orderItems.map(item => 
+      productRepo.update(item.product._id || item.product, { $inc: { stock: -item.qty } })
+    );
+    await Promise.all(promises);
+    await this.invalidateCache();
+  }
 }
 
-export default new ProductService();
+const productService = new ProductService();
+
+eventBus.on('order.paid', async (order) => {
+  try {
+    await productService.reduceStockForOrder(order.items);
+  } catch (err) {
+    console.error('Failed to dynamically reduce stock via EventBus:', err);
+  }
+});
+
+export default productService;
