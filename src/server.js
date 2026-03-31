@@ -12,14 +12,28 @@ const probeCloudinaryUploadAccess = async () => {
   try {
     const testDataUri =
       "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO7Z3S8AAAAASUVORK5CYII=";
-    await cloudinary.uploader.upload(testDataUri, {
+
+    const uploadPromise = cloudinary.uploader.upload(testDataUri, {
       folder: "bestina-startup-check",
       resource_type: "auto",
     });
+
+    // Add timeout of 10 seconds
+    const timeoutPromise = new Promise((_, reject) =>
+      setTimeout(
+        () => reject(new Error("Cloudinary upload probe timeout")),
+        10000,
+      ),
+    );
+
+    await Promise.race([uploadPromise, timeoutPromise]);
     logger.info("✅ Cloudinary Upload API access verified at startup");
   } catch (err) {
-    const http_code = Number(err?.http_code) || 500;
-    if (http_code === 403) {
+    const http_code = Number(err?.http_code) || 0;
+    if (
+      http_code === 403 ||
+      (err?.name === "Error" && err?.message?.includes("forbidden"))
+    ) {
       throw new Error(
         "❌ Cloudinary Upload API access FORBIDDEN (403). " +
           "Check Cloudinary dashboard: " +
@@ -29,7 +43,11 @@ const probeCloudinaryUploadAccess = async () => {
           "4. Update CLOUDINARY_API_KEY and CLOUDINARY_API_SECRET in .env and restart.",
       );
     }
-    throw err;
+    // For other errors like timeouts, log a warning but continue
+    logger.warn("⚠️ Cloudinary probe warning (continuing anyway):", {
+      error: err?.message || String(err),
+      code: err?.http_code || "unknown",
+    });
   }
 };
 
@@ -44,8 +62,15 @@ process.on("uncaughtException", (err) => {
 const startServer = async () => {
   try {
     await probeCloudinaryUploadAccess();
-    // Parallel initialization for faster boot
-    await Promise.all([connectMongoDB(), initializeRedis()]);
+    // Connect to MongoDB (required)
+    await connectMongoDB();
+
+    // Initialize Redis in background (optional - doesn't block startup)
+    initializeRedis().catch((err) => {
+      logger.warn("⚠️ Redis initialization failed, continuing without Redis:", {
+        error: err.message,
+      });
+    });
 
     const server = app.listen(config.port, () => {
       logger.info(`App running on port ${config.port} in ${config.env} mode`);
@@ -60,7 +85,23 @@ const startServer = async () => {
       });
     });
   } catch (error) {
-    logger.error("❌ Failed to start server:", { error: error.message });
+    let errorMsg = "Unknown error";
+    let errorStack = "";
+
+    if (error instanceof Error) {
+      errorMsg = error.message || String(error);
+      errorStack = error.stack || "";
+    } else if (error && typeof error === "object" && error.message) {
+      errorMsg = error.message;
+    } else if (typeof error === "string") {
+      errorMsg = error;
+    } else {
+      errorMsg = JSON.stringify(error, null, 2);
+    }
+
+    console.error("❌ STARTUP FAILED:", errorMsg);
+    if (errorStack) console.error("STACK:", errorStack);
+    logger.error(`Failed to start server: ${errorMsg}`, { stack: errorStack });
     process.exit(1);
   }
 };

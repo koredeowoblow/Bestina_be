@@ -1,25 +1,44 @@
-import Product from './product.model.js';
-class ProductRepository {
+import Product from "./product.model.js";
+
+export class ProductRepository {
+  constructor({ ProductModel }) {
+    if (!ProductModel) {
+      throw new Error("ProductRepository requires ProductModel");
+    }
+    this.model = ProductModel;
+  }
+
   async paginateProducts(filter, options) {
-    // using paginate plugin on model
-    return await Product.paginate(filter, options);
+    return this.model.paginate(filter, options);
   }
 
   async findById(id) {
-    return await Product.findById(id).populate('category', 'name slug').lean();
+    return this.model.findById(id).populate("category", "name slug").lean();
   }
 
-  async create(data) {
-    return await Product.create(data);
+  async create(data, session = null) {
+    return this.model.create([data], { session }).then(res => res[0]);
   }
 
-  async update(id, data) {
-    return await Product.findByIdAndUpdate(id, data, { new: true, runValidators: true });
+  async update(id, data, session = null, extraFilter = {}) {
+    const filter = { _id: id, ...extraFilter };
+    return this.model.findOneAndUpdate(filter, data, {
+      new: true,
+      runValidators: true,
+      session,
+    });
   }
 
   async softDelete(id) {
-    return await Product.findByIdAndUpdate(id, { isArchived: true }, { new: true });
+    return this.model.findByIdAndUpdate(
+      id,
+      { isArchived: true },
+      { new: true },
+    );
   }
 }
 
-export default new ProductRepository();
+// Temporary legacy export for modules not yet migrated to container wiring.
+const productRepository = new ProductRepository({ ProductModel: Product });
+
+export default productRepository;

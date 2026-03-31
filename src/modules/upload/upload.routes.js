@@ -8,6 +8,11 @@ const router = express.Router();
 router.use(protect);
 
 router.post("/", upload.single("image"), uploadController.uploadImage);
+router.post(
+  "/multiple",
+  upload.array("images", 10),
+  uploadController.uploadImages,
+);
 router.delete(
   "/:publicId",
   restrictTo("admin", "super_admin"),

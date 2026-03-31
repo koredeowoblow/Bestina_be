@@ -5,6 +5,7 @@ const isCloudinaryUrl = (value) =>
   typeof value === "string" && value.startsWith("https://res.cloudinary.com");
 
 const addressSchema = new mongoose.Schema({
+  fullName: { type: String, trim: true },
   street: { type: String, required: true },
   city: { type: String, required: true },
   state: { type: String, required: true },
@@ -25,6 +26,17 @@ const userSchema = new mongoose.Schema(
       unique: true,
       lowercase: true,
     },
+    phone: { type: String, trim: true },
+    dateOfBirth: { type: Date },
+    status: {
+      type: String,
+      enum: ["active", "suspended"],
+      default: "active",
+    },
+    preferences: {
+      orderUpdates: { type: Boolean, default: true },
+      promotions: { type: Boolean, default: false },
+    },
     password: {
       type: String,
       required: [true, "Please provide a password"],
@@ -39,8 +51,7 @@ const userSchema = new mongoose.Schema(
     photo: {
       url: {
         type: String,
-        default:
-          "https://res.cloudinary.com/default/image/upload/v1/avatar.png",
+        default: "https://res.cloudinary.com/demo/image/upload/sample.jpg",
         validate: {
           validator: isCloudinaryUrl,
           message: "Photo URL must start with https://res.cloudinary.com",
@@ -63,12 +74,20 @@ const userSchema = new mongoose.Schema(
 );
 
 // Global transformation for JSON response to simplify photo
+userSchema.virtual("avatar").get(function () {
+  return this.photo;
+});
+userSchema.virtual("avatar").set(function (v) {
+  this.set({ photo: v });
+});
+
 userSchema.set("toJSON", {
   virtuals: true,
   versionKey: false,
   transform: function (doc, ret) {
     if (ret.photo && ret.photo.url) {
       ret.photo = ret.photo.url;
+      ret.avatar = ret.photo;
     }
     delete ret.password;
     return ret;

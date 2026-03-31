@@ -1,55 +1,39 @@
-import cartService from './cart.service.js';
-import asyncWrapper from '../../utils/asyncWrapper.js';
+import cartService from "./cart.service.js";
+import asyncWrapper from "../../utils/asyncWrapper.js";
+import { sendSuccess } from "../../utils/sendResponse.js";
 
 class CartController {
   getCart = asyncWrapper(async (req, res, next) => {
     const cart = await cartService.getCart(req.user.id);
-    res.status(200).json({
-      success: true,
-      message: 'Cart retrieved successfully',
-      data: cart
-    });
+    return sendSuccess(res, cart, "Cart retrieved successfully");
   });
 
   addItem = asyncWrapper(async (req, res, next) => {
-    const { productId, qty } = req.body;
-    const cart = await cartService.addItem(req.user.id, productId, qty);
-    res.status(200).json({
-      success: true,
-      message: 'Item added to cart',
-      data: cart
-    });
+    const { productId, qty: quantity } = req.body;
+    const cart = await cartService.addItem(req.user.id, productId, quantity);
+    return sendSuccess(res, cart, "Item added to cart");
   });
 
   updateItem = asyncWrapper(async (req, res, next) => {
-    const { productId, qty } = req.body;
-    const cart = await cartService.updateItemQty(req.user.id, productId, qty);
-    res.status(200).json({
-      success: true,
-      message: 'Cart updated successfully',
-      data: cart
-    });
+    const { productId, qty: quantity } = req.body;
+    const cart = await cartService.updateItemQty(
+      req.user.id,
+      productId,
+      quantity,
+    );
+    return sendSuccess(res, cart, "Cart updated successfully");
   });
 
   removeItem = asyncWrapper(async (req, res, next) => {
-    const { itemId } = req.params; // Using itemId as productId mappings in frontend
+    const { itemId } = req.params;
     const cart = await cartService.removeItem(req.user.id, itemId);
-    res.status(200).json({
-      success: true,
-      message: 'Item removed from cart',
-      data: cart
-    });
+    return sendSuccess(res, cart, "Item removed from cart");
   });
 
   clearCart = asyncWrapper(async (req, res, next) => {
     const cart = await cartService.clearCart(req.user.id);
-    res.status(200).json({
-      success: true,
-      message: 'Cart cleared successfully',
-      data: cart
-    });
+    return sendSuccess(res, cart, "Cart cleared successfully");
   });
 }
-
 
 export default new CartController();

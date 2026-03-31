@@ -12,6 +12,10 @@ class CategoryRepository {
     return await Category.findById(id).lean();
   }
 
+  async findBySlug(slug) {
+    return await Category.findOne({ slug, isActive: true }).lean();
+  }
+
   async create(data) {
     return await Category.create(data);
   }

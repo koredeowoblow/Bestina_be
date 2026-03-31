@@ -8,6 +8,21 @@ import User from "../modules/auth/auth.model.js";
 // Note: Requires User model to be implemented.
 // We will import it here, assuming auth module provides it.
 
+const normalizeEnvKey = (envValue) => {
+  if (!envValue || typeof envValue !== "string") return "";
+  return envValue.replace(/\\n/g, "\n").trim();
+};
+
+const isPemKey = (keyValue, keyType) => {
+  if (!keyValue) return false;
+  return keyValue.includes(`-----BEGIN ${keyType} KEY-----`);
+};
+
+const publicKey = normalizeEnvKey(process.env.JWT_PUBLIC_KEY);
+const privateKey = normalizeEnvKey(process.env.JWT_PRIVATE_KEY);
+const useAsymmetricJwt =
+  isPemKey(privateKey, "PRIVATE") && isPemKey(publicKey, "PUBLIC");
+
 export const protect = asyncWrapper(async (req, res, next) => {
   // 1. Get token
   let token;
@@ -16,9 +31,12 @@ export const protect = asyncWrapper(async (req, res, next) => {
     req.headers.authorization.startsWith("Bearer")
   ) {
     token = req.headers.authorization.split(" ")[1];
+  } else if (req.cookies?.jwt_access) {
+    token = req.cookies.jwt_access;
   }
 
   if (!token) {
+    console.warn(`Auth Debug - No Token Found. Cookies: ${Object.keys(req.cookies || {}).join(",")}`);
     return next(
       new AppError("You are not logged in! Please log in to get access.", 401),
     );
@@ -40,9 +58,8 @@ export const protect = asyncWrapper(async (req, res, next) => {
   // 3. Verify token
   let decoded;
   try {
-    if (process.env.JWT_PUBLIC_KEY) {
-      const pubKey = process.env.JWT_PUBLIC_KEY.replace(/\\n/g, "\n");
-      decoded = await promisify(jwt.verify)(token, pubKey, {
+    if (useAsymmetricJwt) {
+      decoded = await promisify(jwt.verify)(token, publicKey, {
         algorithms: ["RS256"],
       });
     } else {

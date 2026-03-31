@@ -1,70 +1,131 @@
-import productService from './product.service.js';
-import asyncWrapper from '../../utils/asyncWrapper.js';
+import asyncWrapper from "../../utils/asyncWrapper.js";
+import { sendSuccess } from "../../utils/sendResponse.js";
+import Review from "../reviews/review.model.js";
+import AppError from "../../utils/AppError.js";
+import Order from "../orders/order.model.js";
 
 class ProductController {
-  getProducts = asyncWrapper(async (req, res, next) => {
-    // Optional admin context to fetch archived products
-    const isAdmin = req.user && ['admin', 'super_admin'].includes(req.user.role);
+  constructor({ productService }) {
+    if (!productService) {
+      throw new Error("ProductController requires productService");
+    }
 
-    const result = await productService.getProducts(req.query, isAdmin);
+    this.productService = productService;
+    this.getProducts = asyncWrapper(this.getProducts.bind(this));
+    this.getProductById = asyncWrapper(this.getProductById.bind(this));
+    this.createProduct = asyncWrapper(this.createProduct.bind(this));
+    this.updateProduct = asyncWrapper(this.updateProduct.bind(this));
+    this.deleteProduct = asyncWrapper(this.deleteProduct.bind(this));
+    this.getProductReviews = asyncWrapper(this.getProductReviews.bind(this));
+    this.createProductReview = asyncWrapper(
+      this.createProductReview.bind(this),
+    );
+  }
 
-    res.status(200).json({
-      success: true,
-      message: 'Products fetched successfully',
-      data: result.docs,
-      meta: {
-        totalDocs: result.totalDocs,
-        limit: result.limit,
-        totalPages: result.totalPages,
-        page: result.page,
-        pagingCounter: result.pagingCounter,
-        hasPrevPage: result.hasPrevPage,
-        hasNextPage: result.hasNextPage,
-        prevPage: result.prevPage,
-        nextPage: result.nextPage
-      }
-    });
-  });
+  async getProducts(req, res, next) {
+    const isAdmin =
+      req.user && ["admin", "super_admin"].includes(req.user.role);
+    const productsResult = await this.productService.getProducts(
+      req.query,
+      isAdmin,
+    );
+    const productsMeta = {
+      totalDocs: productsResult.totalDocs,
+      limit: productsResult.limit,
+      totalPages: productsResult.totalPages,
+      page: productsResult.page,
+      pagingCounter: productsResult.pagingCounter,
+      hasPrevPage: productsResult.hasPrevPage,
+      hasNextPage: productsResult.hasNextPage,
+      prevPage: productsResult.prevPage,
+      nextPage: productsResult.nextPage,
+    };
 
-  getProductById = asyncWrapper(async (req, res, next) => {
-    const product = await productService.getProductById(req.params.id);
-    res.status(200).json({
-      success: true,
-      message: 'Product fetched successfully',
-      data: product
-    });
-  });
+    return sendSuccess(
+      res,
+      productsResult.docs,
+      "Products fetched successfully",
+      200,
+      productsMeta,
+    );
+  }
 
-  createProduct = asyncWrapper(async (req, res, next) => {
-    // Inject creator
+  async getProductById(req, res, next) {
+    const product = await this.productService.getProductById(req.params.id);
+    return sendSuccess(res, product, "Product fetched successfully");
+  }
+
+  async createProduct(req, res, next) {
     req.body.createdBy = req.user._id;
-    const product = await productService.createProduct(req.body);
+    const product = await this.productService.createProduct(req.body);
+    return sendSuccess(res, product, "Product created successfully", 201);
+  }
 
-    res.status(201).json({
-      success: true,
-      message: 'Product created successfully',
-      data: product
-    });
-  });
+  async updateProduct(req, res, next) {
+    const product = await this.productService.updateProduct(
+      req.params.id,
+      req.body,
+    );
+    return sendSuccess(res, product, "Product updated successfully");
+  }
 
-  updateProduct = asyncWrapper(async (req, res, next) => {
-    const product = await productService.updateProduct(req.params.id, req.body);
-    res.status(200).json({
-      success: true,
-      message: 'Product updated successfully',
-      data: product
-    });
-  });
+  async deleteProduct(req, res, next) {
+    await this.productService.deleteProduct(req.params.id);
+    return sendSuccess(res, null, "Product deleted (archived) successfully");
+  }
 
-  deleteProduct = asyncWrapper(async (req, res, next) => {
-    await productService.deleteProduct(req.params.id);
-    res.status(200).json({
-      success: true,
-      message: 'Product deleted (archived) successfully',
-      data: null
+  async getProductReviews(req, res, next) {
+    const page = parseInt(req.query.page, 10) || 1;
+    const limit = parseInt(req.query.limit, 10) || 10;
+
+    const reviews = await Review.find({ product: req.params.id })
+      .skip((page - 1) * limit)
+      .limit(limit)
+      .sort("-createdAt");
+
+    const totalCount = await Review.countDocuments({ product: req.params.id });
+
+    return sendSuccess(
+      res,
+      {
+        reviews,
+        totalCount,
+        page,
+        totalPages: Math.ceil(totalCount / limit),
+      },
+      "Reviews fetched successfully",
+    );
+  }
+
+  async createProductReview(req, res, next) {
+    const { rating, comment } = req.body;
+    const productId = req.params.id;
+    const userId = req.user._id;
+
+    // Check existing review
+    const existing = await Review.findOne({ product: productId, user: userId });
+    if (existing) {
+      throw new AppError("You have already reviewed this product", 400);
+    }
+
+    // Check verified purchase
+    const order = await Order.findOne({
+      user: userId,
+      "items.product": productId,
+      orderStatus: "delivered",
     });
-  });
+
+    const review = await Review.create({
+      product: productId,
+      user: userId,
+      userName: req.user.name,
+      rating,
+      comment,
+      verifiedPurchase: !!order,
+    });
+
+    return sendSuccess(res, review, "Review created successfully", 201);
+  }
 }
 
-
-export default new ProductController();
+export default ProductController;

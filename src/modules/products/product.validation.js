@@ -36,8 +36,7 @@ const productValidation = {
   }),
   query: Joi.object({
     page: Joi.number().min(1).default(1),
-    limit: Joi.number().min(1).max(100).default(20),
-    category: Joi.string().hex().length(24),
+    category: Joi.string(),
     brand: Joi.string(),
     minPrice: Joi.number().integer().min(0),
     maxPrice: Joi.number().integer().min(0),

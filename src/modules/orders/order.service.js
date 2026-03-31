@@ -1,39 +1,82 @@
-import orderRepo from "./order.repository.js";
-import cartService from "../cart/cart.service.js";
+import mongoose from "mongoose";
 import AppError from "../../utils/AppError.js";
-class OrderService {
-  async createOrder(userId, email, payload) {
-    const cart = await cartService.getCart(userId);
 
-    if (!cart || cart.items.length === 0) {
-      throw new AppError("Your cart is empty", 400);
+const DEFAULT_DELIVERY_FEE = 10;
+const VALID_ORDER_STATUSES = [
+  "pending",
+  "processing",
+  "shipped",
+  "delivered",
+  "cancelled",
+];
+
+class OrderService {
+  constructor({
+    orderRepository,
+    cartService,
+    productService,
+    appErrorClass = AppError,
+    deliveryFee = DEFAULT_DELIVERY_FEE,
+  }) {
+    if (!orderRepository) {
+      throw new Error("OrderService requires orderRepository");
+    }
+    if (!cartService) {
+      throw new Error("OrderService requires cartService");
+    }
+    if (!productService) {
+      throw new Error("OrderService requires productService");
     }
 
-    const { shippingAddress, paymentMethod } = payload;
+    this.orderRepository = orderRepository;
+    this.cartService = cartService;
+    this.productService = productService;
+    this.AppError = appErrorClass;
+    this.deliveryFee = deliveryFee;
+  }
 
-    const deliveryFee = 10; // Simple flat fee for example
+  async createOrder(userId, email, payload) {
+    const session = await mongoose.startSession();
+    session.startTransaction();
 
-    const orderData = {
-      user: userId,
-      items: cart.items.map((i) => ({
-        product: i.product._id,
-        qty: i.qty,
-        price: i.price,
-      })),
-      shippingAddress,
-      paymentMethod,
-      subtotal: cart.subtotal,
-      discount: cart.discountTotal,
-      deliveryFee,
-      total: cart.total + deliveryFee,
-    };
+    try {
+      const cart = await this.cartService.getCart(userId);
 
-    const order = await orderRepo.create(orderData);
+      if (!cart || cart.items.length === 0) {
+        throw new this.AppError("Your cart is empty", 400);
+      }
 
-    // Cart is NOT cleared until payment webhook succeeds, to prevent orphan failed orders clearing carts.
-    // The payment initialization is now securely delegated to POST /api/payments/initialize
+      const { shippingAddress, paymentMethod } = payload;
+      const deliveryFee = this.deliveryFee;
 
-    return { order };
+      const orderData = {
+        user: userId,
+        items: cart.items.map((i) => ({
+          product: i.product._id,
+          qty: i.qty,
+          price: i.price,
+        })),
+        shippingAddress,
+        paymentMethod,
+        subtotal: cart.subtotal,
+        discount: cart.discountTotal,
+        deliveryFee,
+        total: cart.total + deliveryFee,
+      };
+
+      const order = await this.orderRepository.create(orderData, session);
+
+      // Atomic Stock Reduction
+      await this.productService.reduceStockForOrder(cart.items, session);
+
+      await session.commitTransaction();
+      return { order };
+    } catch (error) {
+      await session.abortTransaction();
+      throw error;
+    } finally {
+      session.endSession();
+    }
   }
 
   async getMyOrders(userId, query) {
@@ -46,12 +89,12 @@ class OrderService {
 
     if (query.status) filter.orderStatus = query.status;
 
-    return await orderRepo.paginateOrders(filter, options);
+    return this.orderRepository.paginateOrders(filter, options);
   }
 
   async getOrderById(id, userId, role) {
-    const order = await orderRepo.findById(id);
-    if (!order) throw new AppError("Order not found", 404);
+    const order = await this.orderRepository.findById(id);
+    if (!order) throw new this.AppError("Order not found", 404);
 
     // Check ownership if not admin
     if (
@@ -59,7 +102,10 @@ class OrderService {
       role !== "super_admin" &&
       order.user._id.toString() !== userId.toString()
     ) {
-      throw new AppError("You do not have permission to view this order", 403);
+      throw new this.AppError(
+        "You do not have permission to view this order",
+        403,
+      );
     }
 
     return order;
@@ -87,24 +133,48 @@ class OrderService {
       ],
     };
 
-    return await orderRepo.paginateOrders(filter, options);
+    return this.orderRepository.paginateOrders(filter, options);
   }
 
   async updateOrderStatus(id, status) {
-    const validStatuses = [
-      "pending",
-      "processing",
-      "shipped",
-      "delivered",
-      "cancelled",
-    ];
-    if (!validStatuses.includes(status)) {
-      throw new AppError("Invalid order status", 400);
+    if (!VALID_ORDER_STATUSES.includes(status)) {
+      throw new this.AppError("Invalid order status", 400);
     }
-    const order = await orderRepo.updateStatus(id, status);
-    if (!order) throw new AppError("Order not found", 404);
+    const order = await this.orderRepository.updateStatus(id, status);
+    if (!order) throw new this.AppError("Order not found", 404);
     return order;
+  }
+
+  async cancelOrder(id, userId, role) {
+    const order = await this.orderRepository.findById(id);
+    if (!order) throw new this.AppError("Order not found", 404);
+
+    // Check ownership if not admin
+    if (
+      role !== "admin" &&
+      role !== "super_admin" &&
+      order.user._id.toString() !== userId.toString()
+    ) {
+      throw new this.AppError(
+        "You do not have permission to cancel this order",
+        403,
+      );
+    }
+
+    // Only allow cancellation of pending/processing orders
+    if (order.orderStatus !== "pending" && order.orderStatus !== "processing") {
+      throw new this.AppError(
+        `Cannot cancel order with status: ${order.orderStatus}`,
+        400,
+      );
+    }
+
+    const cancelledOrder = await this.orderRepository.updateStatus(
+      id,
+      "cancelled",
+    );
+    return cancelledOrder;
   }
 }
 
-export default new OrderService();
+export default OrderService;

@@ -12,7 +12,7 @@ const authValidation = {
   }),
 
   refresh: Joi.object({
-    refreshToken: Joi.string().required()
+    refreshToken: Joi.string()
   }),
 
   forgotPassword: Joi.object({

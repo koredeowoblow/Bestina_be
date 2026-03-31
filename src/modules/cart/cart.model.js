@@ -1,24 +1,59 @@
-import mongoose from 'mongoose';
-const cartItemSchema = new mongoose.Schema({
-  product: { type: mongoose.Schema.Types.ObjectId, ref: 'Product', required: true },
-  qty: { type: Number, required: true, min: 1, default: 1 },
-  price: { type: Number, required: true, min: 0 } // Snapshot of price at add
-}, { _id: false });
+import mongoose from "mongoose";
+const cartItemSchema = new mongoose.Schema(
+  {
+    product: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Product",
+      required: true,
+    },
+    qty: { type: Number, required: true, min: 1, default: 1 },
+    price: { type: Number, required: true, min: 0 }, // Snapshot of price at add
+  },
+  { _id: false, toJSON: { virtuals: true }, toObject: { virtuals: true } },
+);
 
-const cartSchema = new mongoose.Schema({
-  user: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, unique: true },
-  items: [cartItemSchema],
-  subtotal: { type: Number, default: 0 },
-  discountTotal: { type: Number, default: 0 },
-  total: { type: Number, default: 0 }
-}, { timestamps: true });
+cartItemSchema.virtual("productId").get(function () {
+  return this.product;
+});
+cartItemSchema.virtual("quantity").get(function () {
+  return this.qty;
+});
+cartItemSchema.virtual("quantity").set(function (v) {
+  this.set({ qty: v });
+});
+
+const cartSchema = new mongoose.Schema(
+  {
+    user: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      required: true,
+      unique: true,
+    },
+    items: [cartItemSchema],
+    subtotal: { type: Number, default: 0 },
+    discountTotal: { type: Number, default: 0 },
+    total: { type: Number, default: 0 },
+  },
+  {
+    timestamps: true,
+    toJSON: { virtuals: true },
+    toObject: { virtuals: true },
+  },
+);
+
+cartSchema.virtual("itemCount").get(function () {
+  return this.items ? this.items.length : 0;
+});
 
 // Middleware to calculate totals on save
-cartSchema.pre('save', function(next) {
-  this.subtotal = Math.round(this.items.reduce((acc, item) => acc + (item.price * item.qty), 0));
+cartSchema.pre("save", function (next) {
+  this.subtotal = Math.round(
+    this.items.reduce((acc, item) => acc + item.price * item.qty, 0),
+  );
   this.total = Math.round(this.subtotal - this.discountTotal);
   if (this.total < 0) this.total = 0;
   next();
 });
 
-export default mongoose.model('Cart', cartSchema);
+export default mongoose.model("Cart", cartSchema);

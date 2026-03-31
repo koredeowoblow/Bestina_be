@@ -1,5 +1,5 @@
 import express from "express";
-import productController from "./product.controller.js";
+import { productController } from "../../container.js";
 import validate from "../../middlewares/validate.middleware.js";
 import productValidation from "./product.validation.js";
 import { protect, restrictTo } from "../../middlewares/auth.middleware.js";
@@ -41,6 +41,10 @@ router.get(
   productController.getProducts,
 );
 router.get("/:id", productController.getProductById);
+
+// Reviews
+router.get("/:id/reviews", productController.getProductReviews);
+router.post("/:id/reviews", protect, productController.createProductReview);
 
 // Admin routes
 router.use(protect, restrictTo("admin", "super_admin"));

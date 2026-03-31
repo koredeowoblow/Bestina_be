@@ -1,44 +1,31 @@
-import categoryService from './category.service.js';
-import asyncWrapper from '../../utils/asyncWrapper.js';
-
+import categoryService from "./category.service.js";
+import asyncWrapper from "../../utils/asyncWrapper.js";
+import { sendSuccess } from "../../utils/sendResponse.js";
 
 class CategoryController {
   getAllCategories = asyncWrapper(async (req, res, next) => {
-    const isAdmin = req.user && ['admin', 'super_admin'].includes(req.user.role);
+    const isAdmin =
+      req.user && ["admin", "super_admin"].includes(req.user.role);
     const categories = await categoryService.getAllCategories(isAdmin);
-
-    res.status(200).json({
-      success: true,
-      message: 'Categories fetched successfully',
-      data: categories
-    });
+    return sendSuccess(res, categories, "Categories fetched successfully");
   });
 
   createCategory = asyncWrapper(async (req, res, next) => {
     const category = await categoryService.createCategory(req.body);
-    res.status(201).json({
-      success: true,
-      message: 'Category created successfully',
-      data: category
-    });
+    return sendSuccess(res, category, "Category created successfully", 201);
   });
 
   updateCategory = asyncWrapper(async (req, res, next) => {
-    const category = await categoryService.updateCategory(req.params.id, req.body);
-    res.status(200).json({
-      success: true,
-      message: 'Category updated successfully',
-      data: category
-    });
+    const category = await categoryService.updateCategory(
+      req.params.id,
+      req.body,
+    );
+    return sendSuccess(res, category, "Category updated successfully");
   });
 
   deleteCategory = asyncWrapper(async (req, res, next) => {
     await categoryService.deleteCategory(req.params.id);
-    res.status(200).json({
-      success: true,
-      message: 'Category deleted successfully',
-      data: null
-    });
+    return sendSuccess(res, null, "Category deleted successfully");
   });
 }
 

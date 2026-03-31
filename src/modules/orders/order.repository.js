@@ -1,43 +1,53 @@
 import Order from "./order.model.js";
-class OrderRepository {
+
+export class OrderRepository {
+  constructor({ OrderModel }) {
+    if (!OrderModel) {
+      throw new Error("OrderRepository requires OrderModel");
+    }
+
+    this.model = OrderModel;
+  }
+
   async paginateOrders(filter, options) {
     const defaultOptions = {
       lean: true,
       ...options,
     };
-    return await Order.paginate(filter, defaultOptions);
+    return this.model.paginate(filter, defaultOptions);
   }
 
   async findById(id) {
-    return await Order.findById(id)
+    return this.model
+      .findById(id)
       .populate("user", "name email")
       .populate("items.product", "name price images")
       .lean();
   }
 
   async findByPaymentRef(ref) {
-    return await Order.findOne({ paymentRef: ref });
+    return this.model.findOne({ paymentRef: ref });
   }
 
-  async create(data) {
-    return await Order.create(data);
+  async create(data, session = null) {
+    return this.model.create([data], { session }).then(res => res[0]);
   }
 
   async updateStatus(id, newStatus) {
-    const order = await Order.findById(id);
+    const order = await this.model.findById(id);
     if (!order) return null;
     order.orderStatus = newStatus;
-    return await order.save(); // Utilizing pre-save hook to update timeline
+    return order.save();
   }
 
   async updatePayment(id, status, ref = null) {
     const updatePayload = { paymentStatus: status };
     if (ref) updatePayload.paymentRef = ref;
-    return await Order.findByIdAndUpdate(id, updatePayload, { new: true });
+    return this.model.findByIdAndUpdate(id, updatePayload, { new: true });
   }
 
   async recordPaymentStatus(id, paymentId, status, session = null) {
-    return await Order.findByIdAndUpdate(
+    return this.model.findByIdAndUpdate(
       id,
       {
         paymentStatus: status,
@@ -48,4 +58,7 @@ class OrderRepository {
   }
 }
 
-export default new OrderRepository();
+// Temporary legacy export for modules not yet migrated to container wiring.
+const orderRepository = new OrderRepository({ OrderModel: Order });
+
+export default orderRepository;

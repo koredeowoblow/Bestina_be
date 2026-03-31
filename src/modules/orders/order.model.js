@@ -8,6 +8,7 @@ const orderItemSchema = new mongoose.Schema(
       ref: "Product",
       required: true,
     },
+    productName: { type: String },
     qty: { type: Number, required: true, min: 1, set: (v) => Math.round(v) },
     price: { type: Number, required: true, min: 0, set: (v) => Math.round(v) },
   },
@@ -41,6 +42,7 @@ const orderSchema = new mongoose.Schema(
       enum: ["pending", "paid", "failed", "refunded"],
       default: "pending",
     },
+    paymentRef: { type: String },
     payments: [{ type: mongoose.Schema.Types.ObjectId, ref: "Payment" }],
     orderStatus: {
       type: String,

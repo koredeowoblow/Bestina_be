@@ -1,14 +1,30 @@
 import jwt from "jsonwebtoken";
+import crypto from "crypto";
 import config from "../../config/index.js";
 import AppError from "../../utils/AppError.js";
 import authRepo from "./auth.repository.js";
 import Session from "./session.model.js";
 import { getRedisClient, isRedisAvailable } from "../../config/redis.config.js";
+import emailService from "../../utils/email.service.js";
+
+const normalizeEnvKey = (envValue) => {
+  if (!envValue || typeof envValue !== "string") return "";
+  return envValue.replace(/\\n/g, "\n").trim();
+};
+
+const isPemKey = (keyValue, keyType) => {
+  if (!keyValue) return false;
+  return keyValue.includes(`-----BEGIN ${keyType} KEY-----`);
+};
+
+const privateKey = normalizeEnvKey(process.env.JWT_PRIVATE_KEY);
+const publicKey = normalizeEnvKey(process.env.JWT_PUBLIC_KEY);
+const useAsymmetricJwt =
+  isPemKey(privateKey, "PRIVATE") && isPemKey(publicKey, "PUBLIC");
 
 const signToken = (id, expiresIn) => {
-  if (process.env.JWT_PRIVATE_KEY) {
-    const pKey = process.env.JWT_PRIVATE_KEY.replace(/\\n/g, "\n");
-    return jwt.sign({ id }, pKey, {
+  if (useAsymmetricJwt) {
+    return jwt.sign({ id }, privateKey, {
       algorithm: "RS256",
       expiresIn: expiresIn || config.jwt.accessExpiresIn,
     });
@@ -37,12 +53,21 @@ const createSendToken = async (
     expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 days matching JWT config roughly
   });
 
-  // 2. Set HttpOnly strict cookie
-  res.cookie("jwt_refresh", refreshToken, {
-    expires: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+  // 2. Set HttpOnly strict cookies
+  const cookieOptions = {
     httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "strict",
+    secure: process.env.NODE_ENV === "production" || req.secure || req.get('x-forwarded-proto') === 'https',
+    sameSite: req.get('origin')?.includes('localhost') ? 'lax' : 'none',
+  };
+
+  res.cookie("jwt_access", token, {
+    ...cookieOptions,
+    expires: new Date(Date.now() + 24 * 60 * 60 * 1000), // Access token short-lived, but we keep the cookie 24h
+  });
+
+  res.cookie("jwt_refresh", refreshToken, {
+    ...cookieOptions,
+    expires: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
   });
 
   user.password = undefined;
@@ -80,9 +105,8 @@ class AuthService {
   async logout(token, res) {
     let decoded;
     try {
-      if (process.env.JWT_PUBLIC_KEY) {
-        const pubKey = process.env.JWT_PUBLIC_KEY.replace(/\\n/g, "\n");
-        decoded = jwt.verify(token, pubKey, { algorithms: ["RS256"] });
+      if (useAsymmetricJwt) {
+        decoded = jwt.verify(token, publicKey, { algorithms: ["RS256"] });
       } else {
         decoded = jwt.verify(token, config.jwt.secret);
       }
@@ -99,6 +123,11 @@ class AuthService {
       const redisClient = await getRedisClient();
       await redisClient.set(`bl_${token}`, token, { EX: ttl });
     }
+
+    res.cookie("jwt_access", "loggedout", {
+      expires: new Date(Date.now() + 10 * 1000),
+      httpOnly: true,
+    });
 
     res.cookie("jwt_refresh", "loggedout", {
       expires: new Date(Date.now() + 10 * 1000),
@@ -122,9 +151,10 @@ class AuthService {
     }
 
     try {
-      if (process.env.JWT_PUBLIC_KEY) {
-        const pubKey = process.env.JWT_PUBLIC_KEY.replace(/\\n/g, "\n");
-        decoded = jwt.verify(refreshToken, pubKey, { algorithms: ["RS256"] });
+      if (useAsymmetricJwt) {
+        decoded = jwt.verify(refreshToken, publicKey, {
+          algorithms: ["RS256"],
+        });
       } else {
         decoded = jwt.verify(refreshToken, config.jwt.secret);
       }
@@ -171,12 +201,21 @@ class AuthService {
     session.expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
     await session.save();
 
-    // Replay Cookie
+    // Replay Cookies
+    const cookieOptions = {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production" || req.secure || req.get('x-forwarded-proto') === 'https',
+        sameSite: req.get('origin')?.includes('localhost') ? 'lax' : 'none',
+      };
+
+    res.cookie("jwt_access", newAccessToken, {
+      ...cookieOptions,
+      expires: new Date(Date.now() + 24 * 60 * 60 * 1000),
+    });
+
     res.cookie("jwt_refresh", newRefreshToken, {
+      ...cookieOptions,
       expires: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "strict",
     });
 
     res.status(200).json({
@@ -188,13 +227,74 @@ class AuthService {
 
   async getMe(userId, res) {
     const user = await authRepo.findUserById(userId);
-    res
-      .status(200)
-      .json({
+    res.status(200).json({
+      success: true,
+      message: "User profile retrieved",
+      data: { user },
+    });
+  }
+
+  async forgotPassword(email, res) {
+    const user = await authRepo.findUserByEmail(email);
+    if (!user) {
+      // Return a success message to prevent user enumeration
+      return res.status(200).json({
         success: true,
-        message: "User profile retrieved",
-        data: { user },
+        message:
+          "If an account with that email exists, we sent a password reset link",
       });
+    }
+
+    const resetToken = crypto.randomBytes(32).toString("hex");
+    user.passwordResetToken = crypto
+      .createHash("sha256")
+      .update(resetToken)
+      .digest("hex");
+    user.passwordResetExpires = Date.now() + 3600000; // 1 hour
+
+    await user.save({ validateBeforeSave: false });
+
+    try {
+      await emailService.sendPasswordResetEmail(user.email, resetToken);
+
+      res.status(200).json({
+        success: true,
+        message:
+          "If an account with that email exists, we sent a password reset link",
+      });
+    } catch (err) {
+      user.passwordResetToken = undefined;
+      user.passwordResetExpires = undefined;
+      await user.save({ validateBeforeSave: false });
+
+      throw new AppError(
+        "There was an error sending the email. Try again later!",
+        500,
+      );
+    }
+  }
+
+  async resetPassword(token, newPassword, res) {
+    const hashedToken = crypto.createHash("sha256").update(token).digest("hex");
+
+    const user = await authRepo.User.findOne({
+      passwordResetToken: hashedToken,
+      passwordResetExpires: { $gt: Date.now() },
+    });
+
+    if (!user) {
+      throw new AppError("Token is invalid or has expired", 400);
+    }
+
+    user.password = newPassword;
+    user.passwordResetToken = undefined;
+    user.passwordResetExpires = undefined;
+    await user.save();
+
+    res.status(200).json({
+      success: true,
+      message: "Password has been successfully reset. You can now login.",
+    });
   }
 }
 

@@ -67,6 +67,46 @@ class AdminService {
     // Assuming isActive flag on User model
     return await User.findByIdAndUpdate(userId, { isActive: !suspendState }, { new: true });
   }
+
+  async getInventory(filter = 'all') {
+    const query = { isArchived: false };
+    
+    if (filter === 'low') {
+      // Products where stock is less than or equal to threshold
+      query.$expr = { $lte: ['$stock', '$lowStockThreshold'] };
+    } else if (filter === 'out') {
+      query.stock = 0;
+    }
+
+    const products = await Product.find(query).sort('name').lean();
+    return products.map(p => ({
+      ...p,
+      id: p._id.toString(),
+      stockQty: p.stock // Ensure stockQty is available for the UI
+    }));
+  }
+
+  async getInventoryExport() {
+    const products = await Product.find({ isArchived: false }).sort('name').lean();
+    
+    // Simple CSV generation
+    const headers = ['ID', 'Name', 'SKU', 'Stock', 'Threshold', 'Status'];
+    const rows = products.map(p => [
+      p._id,
+      `"${p.name.replace(/"/g, '""')}"`,
+      p.sku || 'N/A',
+      p.stock,
+      p.lowStockThreshold || 0,
+      p.status
+    ]);
+
+    const csvContent = [
+      headers.join(','),
+      ...rows.map(r => r.join(','))
+    ].join('\n');
+
+    return csvContent;
+  }
 }
 
 export default new AdminService();

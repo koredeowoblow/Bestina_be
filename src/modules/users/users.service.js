@@ -1,12 +1,27 @@
-import User from "../auth/auth.model.js";
 import AppError from "../../utils/AppError.js";
-import uploadService from "../upload/upload.service.js";
 import { assertValidCloudinaryUrl } from "../../utils/image-upload.util.js";
 
-class UserService {
+class UsersService {
+  constructor({
+    usersRepository,
+    imageUploadService,
+    appErrorClass = AppError,
+  }) {
+    if (!usersRepository) {
+      throw new Error("UsersService requires usersRepository");
+    }
+    if (!imageUploadService) {
+      throw new Error("UsersService requires imageUploadService");
+    }
+
+    this.usersRepository = usersRepository;
+    this.imageUploadService = imageUploadService;
+    this.AppError = appErrorClass;
+  }
+
   async getProfile(userId) {
-    const user = await User.findById(userId);
-    if (!user) throw new AppError("User not found", 404);
+    const user = await this.usersRepository.findById(userId);
+    if (!user) throw new this.AppError("User not found", 404);
     return user;
   }
 
@@ -22,32 +37,29 @@ class UserService {
     if (dob) updateData.dob = dob;
 
     if (photoBuffer) {
-      const uploadedPhoto = await uploadService.uploadImage(photoBuffer);
+      const uploadedPhoto =
+        await this.imageUploadService.uploadImage(photoBuffer);
       assertValidCloudinaryUrl(uploadedPhoto.url, "Profile photo URL");
 
-      const user = await User.findById(userId);
+      const user = await this.usersRepository.findById(userId);
       if (user && user.photo && user.photo.publicId) {
-        // Delete old image from Cloudinary
-        await uploadService.deleteImage(user.photo.publicId);
+        await this.imageUploadService.deleteImage(user.photo.publicId);
       }
       updateData.photo = uploadedPhoto;
     }
 
-    return await User.findByIdAndUpdate(userId, updateData, {
-      new: true,
-      runValidators: true,
-    });
+    return this.usersRepository.updateById(userId, updateData);
   }
 
   async getAddresses(userId) {
-    const user = await User.findById(userId).select("addresses");
-    if (!user) throw new AppError("User not found", 404);
+    const user = await this.usersRepository.findByIdWithAddresses(userId);
+    if (!user) throw new this.AppError("User not found", 404);
     return user.addresses;
   }
 
   async addAddress(userId, payload) {
-    const user = await User.findById(userId);
-    if (!user) throw new AppError("User not found", 404);
+    const user = await this.usersRepository.findById(userId);
+    if (!user) throw new this.AppError("User not found", 404);
 
     if (payload.isDefault) {
       user.addresses.forEach((addr) => (addr.isDefault = false));
@@ -61,8 +73,8 @@ class UserService {
   }
 
   async deleteAddress(userId, addressId) {
-    const user = await User.findById(userId);
-    if (!user) throw new AppError("User not found", 404);
+    const user = await this.usersRepository.findById(userId);
+    if (!user) throw new this.AppError("User not found", 404);
 
     const initialLength = user.addresses.length;
     user.addresses = user.addresses.filter(
@@ -70,7 +82,7 @@ class UserService {
     );
 
     if (user.addresses.length === initialLength) {
-      throw new AppError("Address not found", 404);
+      throw new this.AppError("Address not found", 404);
     }
 
     // if deleted was default, make the first one default (if exists)
@@ -82,6 +94,57 @@ class UserService {
     await user.save();
     return user.addresses;
   }
+
+  async updateAddress(userId, addressId, payload) {
+    const user = await this.usersRepository.findById(userId);
+    if (!user) throw new this.AppError("User not found", 404);
+
+    const address = user.addresses.id(addressId);
+    if (!address) throw new this.AppError("Address not found", 404);
+
+    if (payload.isDefault) {
+      user.addresses.forEach((addr) => (addr.isDefault = false));
+    }
+
+    Object.assign(address, payload);
+    await user.save();
+    return address;
+  }
+
+  async updatePreferences(userId, payload) {
+    const user = await this.usersRepository.findById(userId);
+    if (!user) throw new this.AppError("User not found", 404);
+
+    user.preferences = {
+      ...user.preferences,
+      ...payload,
+    };
+    await user.save();
+    return user.preferences;
+  }
+
+  async updateAvatar(userId, photoBuffer) {
+    if (!photoBuffer) throw new this.AppError("Image buffer is required", 400);
+
+    const uploadedPhoto =
+      await this.imageUploadService.uploadImage(photoBuffer); // Might want 'avatars' folder
+    assertValidCloudinaryUrl(uploadedPhoto.url, "Profile photo URL");
+
+    const user = await this.usersRepository.findById(userId);
+    if (!user) throw new this.AppError("User not found", 404);
+
+    if (user.photo && user.photo.publicId) {
+      await this.imageUploadService.deleteImage(user.photo.publicId);
+    }
+
+    user.photo = uploadedPhoto;
+    await user.save();
+
+    return {
+      avatar: { url: uploadedPhoto.url, publicId: uploadedPhoto.publicId },
+      userId: user._id,
+    };
+  }
 }
 
-export default new UserService();
+export default UsersService;
