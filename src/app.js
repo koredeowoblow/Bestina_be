@@ -35,13 +35,13 @@ const defaultOrigins = [
 ];
 
 app.use(
-  cors({
-    origin: process.env.CORS_ORIGIN 
-      ? [...process.env.CORS_ORIGIN.split(","), ...defaultOrigins]
-      : defaultOrigins,
-    credentials: true,
-    allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With", "Accept"],
-  }),
+  // cors({
+  //   origin: process.env.CORS_ORIGIN 
+  //     ? [...process.env.CORS_ORIGIN.split(","), ...defaultOrigins]
+  //     : defaultOrigins,
+  //   credentials: true,
+  //   allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With", "Accept"],
+  // }),
 );
 
 if (config.env === "development") {
