@@ -28,9 +28,17 @@ const app = express();
 // 1. GLOBAL MIDDLEWARES
 app.use(helmet());
 
+const defaultOrigins = [
+  "http://localhost:3000",
+  "http://localhost:5173",
+  "https://bestina.onrender.com",
+];
+
 app.use(
   cors({
-    origin: process.env.CORS_ORIGIN ? process.env.CORS_ORIGIN.split(",") : true,
+    origin: process.env.CORS_ORIGIN 
+      ? [...process.env.CORS_ORIGIN.split(","), ...defaultOrigins]
+      : defaultOrigins,
     credentials: true,
     allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With", "Accept"],
   }),
