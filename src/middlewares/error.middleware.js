@@ -45,7 +45,8 @@ const sendErrorProd = (err, res) => {
     res.status(500).json({
       success: false,
       status: 'error',
-      message: 'Something went very wrong!',
+      message: process.env.SHOW_ERROR_DETAILS === 'true' ? err.message : 'Something went very wrong!',
+      error: process.env.SHOW_ERROR_DETAILS === 'true' ? err : undefined,
       data: null
     });
   }

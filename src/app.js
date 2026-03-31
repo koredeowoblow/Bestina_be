@@ -31,17 +31,30 @@ app.use(helmet());
 const defaultOrigins = [
   "http://localhost:3000",
   "http://localhost:5173",
+  /\.onrender\.com$/, // Matches any subdomain on render.com
   "https://bestina.onrender.com",
 ];
 
 app.use(
-  // cors({
-  //   origin: process.env.CORS_ORIGIN 
-  //     ? [...process.env.CORS_ORIGIN.split(","), ...defaultOrigins]
-  //     : defaultOrigins,
-  //   credentials: true,
-  //   allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With", "Accept"],
-  // }),
+  cors({
+    origin: (origin, callback) => {
+      // Allow requests with no origin (like mobile apps or curl)
+      if (!origin) return callback(null, true);
+      
+      const isAllowed = defaultOrigins.some((allowed) => {
+        if (allowed instanceof RegExp) return allowed.test(origin);
+        return allowed === origin;
+      });
+
+      if (isAllowed || (process.env.CORS_ORIGIN && process.env.CORS_ORIGIN.split(",").includes(origin))) {
+        callback(null, true);
+      } else {
+        callback(new AppError(`Not allowed by CORS: ${origin}`, 403));
+      }
+    },
+    credentials: true,
+    allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With", "Accept"],
+  }),
 );
 
 if (config.env === "development") {

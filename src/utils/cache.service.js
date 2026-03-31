@@ -16,27 +16,43 @@ class CacheService {
   }
 
   async get(key) {
-    if (!this.isAvailable()) return null;
-    const redisClient = await this.getRedisClient();
-    return redisClient.get(key);
+    try {
+      if (!this.isAvailable()) return null;
+      const redisClient = await this.getRedisClient();
+      if (!redisClient) return null;
+      return await redisClient.get(key);
+    } catch (error) {
+      console.warn(`Cache get failed for key ${key}:`, error.message);
+      return null;
+    }
   }
 
   async set(key, value, options = null) {
-    if (!this.isAvailable()) return;
-    const redisClient = await this.getRedisClient();
+    try {
+      if (!this.isAvailable()) return;
+      const redisClient = await this.getRedisClient();
+      if (!redisClient) return;
 
-    if (options) {
-      await redisClient.set(key, value, options);
-      return;
+      if (options) {
+        await redisClient.set(key, value, options);
+        return;
+      }
+
+      await redisClient.set(key, value);
+    } catch (error) {
+      console.warn(`Cache set failed for key ${key}:`, error.message);
     }
-
-    await redisClient.set(key, value);
   }
 
   async increment(key) {
-    if (!this.isAvailable()) return;
-    const redisClient = await this.getRedisClient();
-    await redisClient.incr(key);
+    try {
+      if (!this.isAvailable()) return;
+      const redisClient = await this.getRedisClient();
+      if (!redisClient) return;
+      await redisClient.incr(key);
+    } catch (error) {
+      console.warn(`Cache increment failed for key ${key}:`, error.message);
+    }
   }
 }
 
