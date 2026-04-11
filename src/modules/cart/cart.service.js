@@ -21,7 +21,7 @@ class CartService {
       throw new AppError('Product is out of stock', 400);
     }
     if (qty > product.stock) {
-      throw new AppError('Requested quantity exceeds available stock', 400);
+      throw new AppError(`Requested quantity exceeds available stock of ${product.stock}`, 400);
     }
 
     let cart = await cartRepo.getCartByUserId(userId);
@@ -33,7 +33,7 @@ class CartService {
       // Increment qty
       const newQty = cart.items[existingItemIndex].qty + qty;
       if (newQty > product.stock) {
-         throw new AppError('Requested quantity exceeds available stock', 400);
+        throw new AppError(`Requested quantity exceeds available stock of ${product.stock}`, 400);
       }
       cart.items[existingItemIndex].qty = newQty;
       cart.items[existingItemIndex].price = product.price; // Update to latest price
@@ -66,14 +66,14 @@ class CartService {
       throw new AppError('Product is out of stock', 400);
     }
     if (qty > product.stock) {
-      throw new AppError('Requested quantity exceeds available stock', 400);
+      throw new AppError(`Requested quantity exceeds available stock of ${product.stock}`, 400);
     }
 
     cart.items[existingItemIndex].qty = qty;
     cart.items[existingItemIndex].price = product.price;
 
     await cartRepo.saveCart(cart);
-    return await cartRepo.getCartByUserId(userId);
+    return this._stripProductFields(await cartRepo.getCartByUserId(userId));
   }
 
   async removeItem(userId, productId) {
@@ -81,9 +81,9 @@ class CartService {
     if (!cart) throw new AppError('Cart not found', 404);
 
     cart.items = cart.items.filter(item => item.product._id.toString() !== productId.toString());
-    
+
     await cartRepo.saveCart(cart);
-    return await cartRepo.getCartByUserId(userId);
+    return this._stripProductFields(await cartRepo.getCartByUserId(userId));
   }
 
   async clearCart(userId) {

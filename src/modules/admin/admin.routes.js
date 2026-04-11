@@ -7,8 +7,6 @@ const router = express.Router();
 
 router.use(protect, restrictTo("admin", "super_admin"));
 
-router.use(protect, restrictTo("admin", "super_admin"));
-
 router.get("/dashboard/stats", adminController.getStats);
 
 router.get("/returns", returnController.getAdminReturns);

@@ -8,12 +8,16 @@ export class ProductRepository {
     this.model = ProductModel;
   }
 
-  async paginateProducts(filter, options) {
+  async paginateProducts(filter, options = {}) {
+    // Only apply for public queries where isArchived is explicitly strictly filtered out 
+    if (filter && filter.isArchived === false) {
+      options.select = options.select ? `${options.select} -createdBy -lowStockThreshold -__v` : '-createdBy -lowStockThreshold -__v';
+    }
     return this.model.paginate(filter, options);
   }
 
   async findById(id) {
-    return this.model.findById(id).populate("category", "name slug").lean();
+    return this.model.findById(id).select("-createdBy -lowStockThreshold -__v").populate("category", "name slug").lean();
   }
 
   async create(data, session = null) {
