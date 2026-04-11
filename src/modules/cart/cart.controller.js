@@ -9,17 +9,17 @@ class CartController {
   });
 
   addItem = asyncWrapper(async (req, res, next) => {
-    const { productId, qty: quantity } = req.body;
-    const cart = await cartService.addItem(req.user.id, productId, quantity);
+    const { productId, qty } = req.body;
+    const cart = await cartService.addItem(req.user.id, productId, qty);
     return sendSuccess(res, cart, "Item added to cart");
   });
 
   updateItem = asyncWrapper(async (req, res, next) => {
-    const { productId, qty: quantity } = req.body;
+    const { productId, qty } = req.body;
     const cart = await cartService.updateItemQty(
       req.user.id,
       productId,
-      quantity,
+      qty,
     );
     return sendSuccess(res, cart, "Cart updated successfully");
   });

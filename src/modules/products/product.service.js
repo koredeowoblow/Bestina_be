@@ -88,6 +88,10 @@ class ProductService {
       lean: true,
     };
 
+    if (!isAdmin) {
+      options.select = "-createdBy -lowStockThreshold -__v -images._id";
+    }
+
     if (query.sort) {
       options.sort = query.sort; // e.g. "price" or "-price"
     } else if (query.search) {

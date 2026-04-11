@@ -17,8 +17,11 @@ class CartService {
     if (!product || product.isArchived) {
       throw new AppError('Product not found or unavailable', 404);
     }
-    if (product.stock < qty) {
-      throw new AppError(`Only ${product.stock} items left in stock`, 400);
+    if (product.stock <= 0) {
+      throw new AppError('Product is out of stock', 400);
+    }
+    if (qty > product.stock) {
+      throw new AppError('Requested quantity exceeds available stock', 400);
     }
 
     let cart = await cartRepo.getCartByUserId(userId);
@@ -29,8 +32,8 @@ class CartService {
     if (existingItemIndex > -1) {
       // Increment qty
       const newQty = cart.items[existingItemIndex].qty + qty;
-      if (product.stock < newQty) {
-         throw new AppError(`Only ${product.stock} items left in stock. You already have ${cart.items[existingItemIndex].qty} in your cart.`, 400);
+      if (newQty > product.stock) {
+         throw new AppError('Requested quantity exceeds available stock', 400);
       }
       cart.items[existingItemIndex].qty = newQty;
       cart.items[existingItemIndex].price = product.price; // Update to latest price
@@ -56,8 +59,14 @@ class CartService {
     }
 
     const product = await productRepo.findById(productId);
-    if (product.stock < qty) {
-      throw new AppError(`Only ${product.stock} items left in stock`, 400);
+    if (!product || product.isArchived) {
+      throw new AppError('Product not found or unavailable', 404);
+    }
+    if (product.stock <= 0) {
+      throw new AppError('Product is out of stock', 400);
+    }
+    if (qty > product.stock) {
+      throw new AppError('Requested quantity exceeds available stock', 400);
     }
 
     cart.items[existingItemIndex].qty = qty;

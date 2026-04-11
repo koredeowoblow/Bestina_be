@@ -7,8 +7,11 @@ const validate = (schema, source = 'body') => {
     });
 
     if (error) {
-      const errorMessage = error.details.map((details) => details.message).join(', ');
-      return next(new AppError(`Validation Error: ${errorMessage}`, 400));
+      const isProduction = process.env.NODE_ENV === 'production';
+      const errorMessage = isProduction
+        ? 'Invalid request data'
+        : `Validation Error: ${error.details.map((details) => details.message).join(', ')}`;
+      return next(new AppError(errorMessage, 400));
     }
 
     // Replace request data with validated data (applies default values and strips unknown keys)
