@@ -23,10 +23,12 @@ import checkoutRoutes from "./modules/checkout/checkout.routes.js";
 import shippingRoutes from "./modules/shipping/shipping.routes.js";
 import contentRoutes from "./modules/content/content.routes.js";
 import { isRedisAvailable } from "./config/redis.config.js";
+import hpp from "hpp";
 const app = express();
 
 // 1. GLOBAL MIDDLEWARES
 app.use(helmet());
+app.use(hpp());
 
 const defaultOrigins = [
   "http://localhost:3000",
@@ -40,20 +42,29 @@ app.use(
     origin: (origin, callback) => {
       // Allow requests with no origin (like mobile apps or curl)
       if (!origin) return callback(null, true);
-      
+
       const isAllowed = defaultOrigins.some((allowed) => {
         if (allowed instanceof RegExp) return allowed.test(origin);
         return allowed === origin;
       });
 
-      if (isAllowed || (process.env.CORS_ORIGIN && process.env.CORS_ORIGIN.split(",").includes(origin))) {
+      if (
+        isAllowed ||
+        (process.env.CORS_ORIGIN &&
+          process.env.CORS_ORIGIN.split(",").includes(origin))
+      ) {
         callback(null, true);
       } else {
         callback(new AppError(`Not allowed by CORS: ${origin}`, 403));
       }
     },
     credentials: true,
-    allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With", "Accept"],
+    allowedHeaders: [
+      "Content-Type",
+      "Authorization",
+      "X-Requested-With",
+      "Accept",
+    ],
   }),
 );
 
@@ -66,6 +77,7 @@ const limiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   message: "Too many requests from this IP, please try again in 15 minutes!",
 });
+app.set("trust proxy", 1);
 app.use("/api", limiter);
 
 app.use(
