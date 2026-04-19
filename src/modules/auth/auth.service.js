@@ -4,6 +4,7 @@ import config from "../../config/index.js";
 import AppError from "../../utils/AppError.js";
 import authRepo from "./auth.repository.js";
 import Session from "./session.model.js";
+import TokenBlacklist from "./tokenBlacklist.model.js";
 import { getRedisClient, isRedisAvailable } from "../../config/redis.config.js";
 import emailService from "../../utils/email.service.js";
 
@@ -56,8 +57,11 @@ const createSendToken = async (
   // 2. Set HttpOnly strict cookies
   const cookieOptions = {
     httpOnly: true,
-    secure: process.env.NODE_ENV === "production" || req.secure || req.get('x-forwarded-proto') === 'https',
-    sameSite: req.get('origin')?.includes('localhost') ? 'lax' : 'none',
+    secure:
+      process.env.NODE_ENV === "production" ||
+      req.secure ||
+      req.get("x-forwarded-proto") === "https",
+    sameSite: req.get("origin")?.includes("localhost") ? "lax" : "none",
   };
 
   res.cookie("jwt_access", token, {
@@ -119,9 +123,17 @@ class AuthService {
 
     const now = Math.floor(Date.now() / 1000);
     const ttl = decoded.exp - now;
-    if (ttl > 0 && isRedisAvailable()) {
-      const redisClient = await getRedisClient();
-      await redisClient.set(`bl_${token}`, token, { EX: ttl });
+    if (ttl > 0) {
+      const tokenHash = crypto.createHash("sha256").update(token).digest("hex");
+      await TokenBlacklist.create({
+        token: tokenHash,
+        expiresAt: new Date(decoded.exp * 1000),
+      });
+
+      if (isRedisAvailable()) {
+        const redisClient = await getRedisClient();
+        await redisClient.set(`bl_${token}`, token, { EX: ttl });
+      }
     }
 
     res.cookie("jwt_access", "loggedout", {
@@ -203,10 +215,13 @@ class AuthService {
 
     // Replay Cookies
     const cookieOptions = {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === "production" || req.secure || req.get('x-forwarded-proto') === 'https',
-        sameSite: req.get('origin')?.includes('localhost') ? 'lax' : 'none',
-      };
+      httpOnly: true,
+      secure:
+        process.env.NODE_ENV === "production" ||
+        req.secure ||
+        req.get("x-forwarded-proto") === "https",
+      sameSite: req.get("origin")?.includes("localhost") ? "lax" : "none",
+    };
 
     res.cookie("jwt_access", newAccessToken, {
       ...cookieOptions,

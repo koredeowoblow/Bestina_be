@@ -1,9 +1,11 @@
 import jwt from "jsonwebtoken";
+import crypto from "crypto";
 import { promisify } from "util";
 import config from "../config/index.js";
 import AppError from "../utils/AppError.js";
 import asyncWrapper from "../utils/asyncWrapper.js";
 import { getRedisClient, isRedisAvailable } from "../config/redis.config.js";
+import TokenBlacklist from "../modules/auth/tokenBlacklist.model.js";
 import User from "../modules/auth/auth.model.js";
 // Note: Requires User model to be implemented.
 // We will import it here, assuming auth module provides it.
@@ -36,7 +38,9 @@ export const protect = asyncWrapper(async (req, res, next) => {
   }
 
   if (!token) {
-    console.warn(`Auth Debug - No Token Found. Cookies: ${Object.keys(req.cookies || {}).join(",")}`);
+    console.warn(
+      `Auth Debug - No Token Found. Cookies: ${Object.keys(req.cookies || {}).join(",")}`,
+    );
     return next(
       new AppError("You are not logged in! Please log in to get access.", 401),
     );
@@ -47,6 +51,14 @@ export const protect = asyncWrapper(async (req, res, next) => {
   if (isRedisAvailable()) {
     const redisClient = await getRedisClient();
     isBlacklisted = await redisClient.get(`bl_${token}`);
+  }
+
+  if (!isBlacklisted) {
+    const tokenHash = crypto.createHash("sha256").update(token).digest("hex");
+    const blacklisted = await TokenBlacklist.findOne({ token: tokenHash })
+      .select("_id")
+      .lean();
+    isBlacklisted = Boolean(blacklisted);
   }
 
   if (isBlacklisted) {
